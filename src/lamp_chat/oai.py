@@ -50,7 +50,7 @@ def get_httpx_client():
 
 def get_oai_client():
     """
-    Create or get a singleton async OpenAI client.
+    Create or get a singleton async OpenAI client with requests caching enabled.
     """
     global oai_client
     if oai_client is None:

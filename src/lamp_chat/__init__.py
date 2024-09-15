@@ -4,5 +4,6 @@ setup_logging(
     log_level="INFO",
     pkg2loglevel={
         "aiosqlite": "ERROR",
+        "httpx": "ERROR",
     },
 )

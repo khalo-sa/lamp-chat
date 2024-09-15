@@ -29,7 +29,7 @@ The last step does the following:
 Run the following command to start the chatbot:
 
 ```bash
-uv run python -m lamp_chat.ui
+uv run python -m lamp_chat.chat
 ```
 
 It starts a minimal UI where you can chat with the chatbot.

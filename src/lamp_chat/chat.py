@@ -2,11 +2,9 @@ import json
 from typing import Any, Literal
 
 from openai.types.chat import ChatCompletionMessageParam
-from pydantic import BaseModel
 from rich.align import Align
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
 from rich.text import Text
 from sqlalchemy import text
 
@@ -14,11 +12,12 @@ from lamp_chat.conf import conf
 from lamp_chat.db import get_db
 from lamp_chat.oai import get_oai_client
 
+from .log import log
 from .orm import Lamp
 
-console = Console()
 table_repr = Lamp.model_json_schema()
-# table_repr = CreateTable(Lamp.__table__)
+
+
 system_prompt = f"""\
 You are an employee of a German company that sells lamps.
 Customers ask you various types of questions about your company's products.
@@ -30,8 +29,6 @@ To help you answer these questions, you have access to a sqlite database whose s
 
 For all string fields except for `id`, you should use the `LIKE` operator in your SQL queries to match case-insensitively and partially.
 """
-
-console.print(system_prompt)
 
 
 tools = [
@@ -45,7 +42,7 @@ tools = [
                 "properties": {
                     "sql": {
                         "type": "string",
-                        "description": "The SQL query to run on the lamp table.",
+                        "description": "The SQL query to run on the lamp table. Must not contain any curly braces.",
                     }
                 },
                 "required": ["sql"],
@@ -56,17 +53,13 @@ tools = [
 ]
 
 
-class UIMessage(BaseModel):
-    role: Literal["user", "bot"]
-    content: str
-
-
 class Chat:
-    def __init__(self) -> None:
+    def __init__(self, console: Console | None = None) -> None:
         self.oai_messages: list[Any] = []
-        self.ui_messages: list[UIMessage] = []
-        # Add the system prompt once during initialization
+
         self.oai_messages.append({"role": "system", "content": system_prompt})
+
+        self.console = console or Console()
 
     def print_message(self, role: Literal["user", "system", "assistant"], content: str):
         if role == "user":
@@ -87,16 +80,19 @@ class Chat:
             padding=(1, 2),
             width=60,
         )
-        console.print(Align.right(panel) if role == "user" else Align.left(panel))
+        self.console.print(Align.right(panel) if role == "user" else Align.left(panel))
 
     async def lamp_query(self, sql: str, tool_call_id: str):
-        assert isinstance(sql, str), "SQL query must be a string"
-        self.print_message("system", f"Executing SQL query: {sql}")
+        """
+        - Run a SQL query on the lamp table
+        - Add tool message with the query result to history
+        """
+        log.info(f"Executing SQL query: {sql}")
         db = await get_db()
         cursor = await db.exec(text(sql))
         result = cursor.fetchall()
 
-        self.print_message("system", f"Query result: {result}")
+        log.info(f"Query result: {result}")
 
         tool_call_result_message: ChatCompletionMessageParam = {
             "role": "tool",
@@ -106,7 +102,13 @@ class Chat:
 
         self.oai_messages.append(tool_call_result_message)
 
-    async def chat(self, user_message: str = ""):
+    async def send_user_message(self, user_message: str):
+        """
+        - Send user message to OpenAI API
+        - Receive assistant response
+        - Print assistant response
+        """
+
         oai = get_oai_client()
 
         # send user message
@@ -117,14 +119,12 @@ class Chat:
             }
         )
 
-        self.print_message("user", user_message)
-
         response = await oai.chat.completions.create(
             model=conf.use_model,
             messages=self.oai_messages,
-            tools=tools,
+            tools=tools,  # type: ignore
         )
-        # add assistant response message to history
+        # add assistant message to history
         assistant_message = response.choices[0].message
         self.oai_messages.append(assistant_message)  # type: ignore
 
@@ -138,11 +138,11 @@ class Chat:
         if tool_calls:
             n_tool_calls = len(tool_calls)
 
+            # iterate over tool calls
             for i, tool_call in enumerate(tool_calls):
                 args = json.loads(tool_call.function.arguments)
                 assert isinstance(args, dict)
-                self.print_message(
-                    "assistant",
+                log.info(
                     f"Tool call [{i+1}/{n_tool_calls}]: {tool_call.function.name}({args})",
                 )
                 if tool_call.function.name == "lamp_query":
@@ -154,7 +154,7 @@ class Chat:
                 model=conf.use_model, messages=self.oai_messages
             )
 
-            # add assistant response to tool call result message to history
+            # add assistant's reaction to tool result to history
             assistant_message = response.choices[0].message
             self.oai_messages.append(assistant_message)
             if assistant_message.content:
@@ -163,14 +163,19 @@ class Chat:
     async def ui(self):
         try:
             while True:
-                user_message = Prompt.ask("[bold cyan]You", console=console)
-                await self.chat(user_message)
+                user_message = self.console.input("[bold cyan]You: ")
+                await self.send_user_message(user_message)
         except KeyboardInterrupt:
-            console.print("[bold red]Goodbye![/bold red]")
+            pass
+        except Exception as e:
+            log.error(str(e))
 
 
 if __name__ == "__main__":
     import asyncio
 
-    chat = Chat()
-    asyncio.run(chat.ui())
+    try:
+        chat = Chat()
+        asyncio.run(chat.ui())
+    except KeyboardInterrupt:
+        pass

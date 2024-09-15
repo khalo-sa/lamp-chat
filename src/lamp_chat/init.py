@@ -2,7 +2,7 @@ import asyncio
 from collections import defaultdict
 from pathlib import Path
 
-import pymupdf  # imports the pymupdf library
+import pymupdf
 from rich.progress import track
 
 from lamp_chat.conf import conf
@@ -25,6 +25,9 @@ The text will be in German and you should output German as well.
 
 
 async def create_lamp(pdf_text: str) -> Lamp:
+    """
+    - Use Openai API to create a JSON representation of a lamp
+    """
     oai = get_oai_client()
 
     completion = await oai.beta.chat.completions.parse(
@@ -43,6 +46,13 @@ async def create_lamp(pdf_text: str) -> Lamp:
 
 
 async def init_app():
+    """
+    - Load PDFs from the data directory
+    - Extract text from PDFs
+    - Use Openai API to create a JSON representation of each lamp
+    - Store the JSON representation in the database
+    """
+
     oai = get_oai_client()
 
     page = await oai.models.list()
