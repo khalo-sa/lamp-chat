@@ -1,0 +1,22 @@
+[project]
+name = "lamp-chat"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=1.45.0",
+    "rich>=13.8.1",
+    "rich-structlog>=0.4.0",
+    "pydantic-settings>=2.5.2",
+    "hishel>=0.0.30",
+    "sqlmodel>=0.0.22",
+    "sqlalchemy>=2.0.34",
+    "aiosqlite>=0.20.0",
+    "greenlet>=3.1.0",
+    "pymupdf>=1.24.10",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
